@@ -18,6 +18,8 @@ export default function ImageUploadForm() {
   const [error, setError] = useState<string | null>(null);
   const [model, setModel] = useState<nsfwjs.NSFWJS | null>(null);
   const [modelLoading, setModelLoading] = useState(true);
+  const [isNSFW, setIsNSFW] = useState(false);
+  const [nsfwAlert, setNsfwAlert] = useState<string | null>(null);
 
   useEffect(() => {
     const loadModel = async () => {
@@ -41,6 +43,8 @@ export default function ImageUploadForm() {
       setFile(selectedFile);
       setResult(null);
       setError(null);
+      setIsNSFW(false);
+      setNsfwAlert(null);
     }
   };
 
@@ -98,6 +102,27 @@ export default function ImageUploadForm() {
     });
   };
 
+  const checkNSFWContent = (predictions: Array<{ className: string; probability: number }>) => {
+    const highRiskCategories = ['Sexy', 'Porn', 'Hentai'];
+    const threshold = 0.2; // 20% threshold for "sangat tinggi"
+
+    const highRiskPredictions = predictions.filter(pred =>
+      highRiskCategories.includes(pred.className) && pred.probability > threshold
+    );
+
+    if (highRiskPredictions.length > 0) {
+      setIsNSFW(true);
+      const alertMessage = highRiskPredictions
+        .map(pred => `${pred.className}: ${(pred.probability * 100).toFixed(1)}%`)
+        .join(', ');
+
+      setNsfwAlert(`⚠️ Gambar mengandung konten NSFW: ${alertMessage}`);
+    } else {
+      setIsNSFW(false);
+      setNsfwAlert(null);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file || !model) return;
@@ -128,6 +153,9 @@ export default function ImageUploadForm() {
         url: uploadData.url,
         predictions,
       });
+
+      // Check for NSFW content and update UI accordingly
+      checkNSFWContent(predictions);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -180,15 +208,42 @@ export default function ImageUploadForm() {
         </div>
       )}
 
+      {nsfwAlert && (
+        <div className="mt-4 p-4 bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-600 rounded">
+          <div className="flex items-center">
+            <span className="text-red-600 dark:text-red-400 text-xl mr-2">⚠️</span>
+            <span className="font-semibold text-red-800 dark:text-red-200">NSFW Content Detected</span>
+          </div>
+          <p className="mt-2 text-red-700 dark:text-red-300">{nsfwAlert}</p>
+        </div>
+      )}
+
       {result && (
-        <div className="mt-4 p-4 bg-green-100 dark:bg-green-900 border border-green-400 dark:border-green-600 rounded">
+        <div className={`mt-4 p-4 ${isNSFW ? 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800' : 'bg-green-100 dark:bg-green-900 border-green-400 dark:border-green-600'} border rounded`}>
           <h3 className="font-bold mb-2">Analysis Result:</h3>
-          <img src={result.url} alt="Uploaded" className="w-full h-48 object-cover mb-2 rounded" />
+          <div className="relative">
+            <img
+              src={result.url}
+              alt="Uploaded"
+              className={`w-full h-48 object-cover mb-2 rounded ${isNSFW ? 'filter blur-sm' : ''}`}
+            />
+            {isNSFW && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="bg-black bg-opacity-50 text-white px-4 py-2 rounded font-semibold">
+                  NSFW Content Blurred
+                </div>
+              </div>
+            )}
+          </div>
           <div className="space-y-1">
             {result.predictions.map((pred, index) => (
               <div key={index} className="flex justify-between">
-                <span>{pred.className}:</span>
-                <span>{(pred.probability * 100).toFixed(2)}%</span>
+                <span className={isNSFW && ['Sexy', 'Porn', 'Hentai'].includes(pred.className) && pred.probability > 0.5 ? 'font-bold text-red-600' : ''}>
+                  {pred.className}:
+                </span>
+                <span className={isNSFW && ['Sexy', 'Porn', 'Hentai'].includes(pred.className) && pred.probability > 0.5 ? 'font-bold text-red-600' : ''}>
+                  {(pred.probability * 100).toFixed(2)}%
+                </span>
               </div>
             ))}
           </div>
